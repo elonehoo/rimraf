@@ -3,9 +3,8 @@ import assert from 'assert'
 import glob from 'glob'
 
 let fs = require('fs')
-import { GlobOpts,Options } from '~/types'
 
-const defaultGlobOpts:GlobOpts = {
+const defaultGlobOpts = {
   nosort: true,
   silent: true
 }
@@ -15,7 +14,7 @@ let timeout:number = 0
 
 const isWindows:boolean = (process.platform === "win32")
 
-const defaults = (options:Options) => {
+const defaults = (options:any) => {
   const methods = [
     'unlink',
     'chmod',
@@ -42,7 +41,7 @@ const defaults = (options:Options) => {
   options.glob = options.glob || defaultGlobOpts
 }
 
-const rimraf = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+const rimraf = (paths:string, options:any, callback:any) => {
   if (typeof options === 'function') {
     callback = options
     options = {}
@@ -60,14 +59,14 @@ const rimraf = (paths:string, options:Options, callback: (error: Error | null | 
   let errState:any = null
   let n:number = 0
 
-  const next = (er:Error) => {
+  const next = (er:any) => {
     errState = errState || er
     if (--n === 0){
       callback(errState)
     }
   }
 
-  const afterGlob = (er:Error, results:any) => {
+  const afterGlob = (er:any, results:any) => {
     if (er)
       return callback(er)
 
@@ -108,7 +107,7 @@ const rimraf = (paths:string, options:Options, callback: (error: Error | null | 
   }
 
 
-  options.lstat(paths, (er, stat) => {
+  options.lstat(paths, (er:any, stat:any) => {
     if (!er){
       return afterGlob(null, [paths])
     }
@@ -117,11 +116,11 @@ const rimraf = (paths:string, options:Options, callback: (error: Error | null | 
   })
 }
 
-const rimraf_ = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+const rimraf_ = (paths:any, options:any, callback:any) => {
   assert(paths)
   assert(options)
   assert(typeof callback === 'function')
-  options.lstat(paths, (er, st) => {
+  options.lstat(paths, (er:any, st:any) => {
     if (er && er.code === "ENOENT")
       return callback(null)
 
@@ -132,7 +131,7 @@ const rimraf_ = (paths:string, options:Options, callback: (error: Error | null |
     if (st && st.isDirectory())
       return rmdir(paths, options, er, callback)
 
-    options.unlink(paths, er => {
+    options.unlink(paths, (er:any) => {
       if (er) {
         if (er.code === "ENOENT")
           return callback(null)
@@ -148,16 +147,16 @@ const rimraf_ = (paths:string, options:Options, callback: (error: Error | null |
   })
 }
 
-const fixWinEPERM = (paths:string, options:Options, er:Error, callback: (error: Error | null | undefined) => void) => {
+const fixWinEPERM = (paths:any, options:any, er:any, callback: any) => {
   assert(paths)
   assert(options)
   assert(typeof callback === 'function')
 
-  options.chmod(paths, 0o666, er2 => {
+  options.chmod(paths, 0o666, (er2:any) => {
     if (er2)
     callback(er2.code === "ENOENT" ? null : er)
     else
-      options.stat(paths, (er3, stats) => {
+      options.stat(paths, (er3:any, stats:any) => {
         if (er3)
         callback(er3.code === "ENOENT" ? null : er)
         else if (stats.isDirectory())
@@ -168,12 +167,12 @@ const fixWinEPERM = (paths:string, options:Options, er:Error, callback: (error: 
   })
 }
 
-const fixWinEPERMSync = (paths:string, options:Options, er:any) => {
-  assert(paths)
+const fixWinEPERMSync = (path:any, options:any, er:any) => {
+  assert(path)
   assert(options)
 
   try {
-    options.chmodSync(paths, 0o666)
+    options.chmodSync(path, 0o666)
   } catch (er2:any) {
     if (er2.code === "ENOENT")
       return
@@ -183,7 +182,7 @@ const fixWinEPERMSync = (paths:string, options:Options, er:any) => {
 
   let stats
   try {
-    stats = options.statSync(paths)
+    stats = options.statSync(path)
   } catch (er3:any) {
     if (er3.code === "ENOENT")
       return
@@ -192,12 +191,12 @@ const fixWinEPERMSync = (paths:string, options:Options, er:any) => {
   }
 
   if (stats.isDirectory())
-    rmdirSync(paths, options, er)
+    rmdirSync(path, options, er)
   else
-    options.unlinkSync(paths)
+    options.unlinkSync(path)
 }
 
-const rmdir = (paths:string, options:Options, originalEr:any, callback: (error: Error | null | undefined) => void) => {
+const rmdir = (paths:any, options:any, originalEr:any, callback:any) => {
   assert(paths)
   assert(options)
   assert(typeof callback === 'function')
@@ -205,7 +204,7 @@ const rmdir = (paths:string, options:Options, originalEr:any, callback: (error: 
   // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
   // if we guessed wrong, and it's not a directory, then
   // raise the original error.
-  options.rmdir(paths, er => {
+  options.rmdir(paths, (er:any) => {
     if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")){
       rmkids(paths, options, callback)
     } else if (er && er.code === "ENOTDIR"){
@@ -217,20 +216,20 @@ const rmdir = (paths:string, options:Options, originalEr:any, callback: (error: 
   })
 }
 
-const rmkids = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+const rmkids = (paths:any, options:any, callback: any) => {
   assert(paths)
   assert(options)
   assert(typeof callback === 'function')
 
-  options.readdir(paths, (er, files) => {
+  options.readdir(paths, (er:any, files:any) => {
     if (er)
       return callback(er)
     let n = files.length
     if (n === 0)
       return options.rmdir(paths, callback)
     let errState:any
-    files.forEach(f => {
-      rimraf(paths.join(paths, f), options, er => {
+    files.forEach((f:any) => {
+      rimraf(paths.join(paths, f), options, (er:any) => {
         if (errState)
           return
         if (er)
@@ -242,25 +241,25 @@ const rmkids = (paths:string, options:Options, callback: (error: Error | null | 
   })
 }
 
-const rimrafSync = (path:string, options:Options) => {
+const rimrafSync = (paths:any, options?:any) => {
   options = options || {}
   defaults(options)
 
-  assert(path, 'rimraf: missing path')
-  assert.equal(typeof path, 'string', 'rimraf: path should be a string')
+  assert(paths, 'rimraf: missing path')
+  assert.equal(typeof paths, 'string', 'rimraf: path should be a string')
   assert(options, 'rimraf: missing options')
   assert.equal(typeof options, 'object', 'rimraf: options should be object')
 
   let results
 
-  if (options.disableGlob || !glob.hasMagic(path)) {
-    results = [path]
+  if (options.disableGlob || !glob.hasMagic(paths)) {
+    results = [paths]
   } else {
     try {
-      options.lstatSync(path)
-      results = [path]
+      options.lstatSync(paths)
+      results = [paths]
     } catch (er) {
-      results = glob.sync(path, options.glob)
+      results = glob.sync(paths, options.glob)
     }
   }
 
@@ -301,3 +300,47 @@ const rimrafSync = (path:string, options:Options) => {
   }
 }
 
+const rmdirSync = (paths:any, options:any, originalEr:any) => {
+  assert(paths)
+  assert(options)
+
+  try {
+    options.rmdirSync(paths)
+  } catch (er:any) {
+    if (er.code === "ENOENT")
+      return
+    if (er.code === "ENOTDIR")
+      throw originalEr
+    if (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")
+      rmkidsSync(paths, options)
+  }
+}
+
+const rmkidsSync = (paths:any, options:any) => {
+  assert(paths)
+  assert(options)
+  options.readdirSync(paths).forEach((f:any) => rimrafSync(path.join(paths, f), options))
+
+  // We only end up here once we got ENOTEMPTY at least once, and
+  // at this point, we are guaranteed to have removed all the kids.
+  // So, we know that it won't be ENOENT or ENOTDIR or anything else.
+  // try really hard to delete stuff on windows, because it has a
+  // PROFOUNDLY annoying habit of not closing handles promptly when
+  // files are deleted, resulting in spurious ENOTEMPTY errors.
+  const retries = isWindows ? 100 : 1
+  let i = 0
+  do {
+    let threw = true
+    try {
+      const ret = options.rmdirSync(paths, options)
+      threw = false
+      return ret
+    } finally {
+      if (++i < retries && threw)
+        continue
+    }
+  } while (true)
+}
+
+export default rimraf
+rimraf.sync = rimrafSync
