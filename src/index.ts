@@ -15,7 +15,7 @@ let timeout:number = 0
 
 const isWindows:boolean = (process.platform === "win32")
 
-const defaults = (options:any) => {
+const defaults = (options:Options) => {
   const methods = [
     'unlink',
     'chmod',
@@ -42,11 +42,262 @@ const defaults = (options:any) => {
   options.glob = options.glob || defaultGlobOpts
 }
 
-const rimraf = (path:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+const rimraf = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
   if (typeof options === 'function') {
     callback = options
     options = {}
   }
 
-  assert(path, 'rimraf: missing path')
+  assert(paths, 'rimraf: missing paths')
+  assert.equal(typeof paths, 'string', 'rimraf: paths should be a string')
+  assert.equal(typeof callback, 'function', 'rimraf: callback function required')
+  assert(options, 'rimraf: invalid options argument provided')
+  assert.equal(typeof options, 'object', 'rimraf: options should be object')
+
+  defaults(options)
+
+  let busyTries:number = 0
+  let errState:any = null
+  let n:number = 0
+
+  const next = (er:Error) => {
+    errState = errState || er
+    if (--n === 0){
+      callback(errState)
+    }
+  }
+
+  const afterGlob = (er:Error, results:any) => {
+    if (er)
+      return callback(er)
+
+    n = results.length
+    if (n === 0){
+      return callback()
+    }
+
+
+    results.forEach((p:any) => {
+      const CB = (er:any) => {
+        if (er) {
+          if ((er.code === "EBUSY" || er.code === "ENOTEMPTY" || er.code === "EPERM") &&
+              busyTries < options.maxBusyTries) {
+            busyTries ++
+            // try again, with the same exact callback as this one.
+            return setTimeout(() => rimraf_(p, options, CB), busyTries * 100)
+          }
+
+          // this one won't happen if graceful-fs is used.
+          if (er.code === "EMFILE" && timeout < options.emfileWait) {
+            return setTimeout(() => rimraf_(p, options, CB), timeout ++)
+          }
+
+          // already gone
+          if (er.code === "ENOENT") er = null
+        }
+
+        timeout = 0
+        next(er)
+      }
+      rimraf_(p, options, CB)
+    })
+  }
+
+  if (options.disableGlob || !glob.hasMagic(paths)){
+    return afterGlob(null, [paths])
+  }
+
+
+  options.lstat(paths, (er, stat) => {
+    if (!er){
+      return afterGlob(null, [paths])
+    }
+
+    glob(paths, options.glob, afterGlob)
+  })
 }
+
+const rimraf_ = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+  assert(paths)
+  assert(options)
+  assert(typeof callback === 'function')
+  options.lstat(paths, (er, st) => {
+    if (er && er.code === "ENOENT")
+      return callback(null)
+
+    // Windows can EPERM on stat.  Life is suffering.
+    if (er && er.code === "EPERM" && isWindows)
+      fixWinEPERM(paths, options, er, callback)
+
+    if (st && st.isDirectory())
+      return rmdir(paths, options, er, callback)
+
+    options.unlink(paths, er => {
+      if (er) {
+        if (er.code === "ENOENT")
+          return callback(null)
+        if (er.code === "EPERM")
+          return (isWindows)
+            ? fixWinEPERM(paths, options, er, callback)
+            : rmdir(paths, options, er, callback)
+        if (er.code === "EISDIR")
+          return rmdir(paths, options, er, callback)
+      }
+      return callback(er)
+    })
+  })
+}
+
+const fixWinEPERM = (paths:string, options:Options, er:Error, callback: (error: Error | null | undefined) => void) => {
+  assert(paths)
+  assert(options)
+  assert(typeof callback === 'function')
+
+  options.chmod(paths, 0o666, er2 => {
+    if (er2)
+    callback(er2.code === "ENOENT" ? null : er)
+    else
+      options.stat(paths, (er3, stats) => {
+        if (er3)
+        callback(er3.code === "ENOENT" ? null : er)
+        else if (stats.isDirectory())
+          rmdir(paths, options, er, callback)
+        else
+          options.unlink(paths, callback)
+      })
+  })
+}
+
+const fixWinEPERMSync = (paths:string, options:Options, er:any) => {
+  assert(paths)
+  assert(options)
+
+  try {
+    options.chmodSync(paths, 0o666)
+  } catch (er2:any) {
+    if (er2.code === "ENOENT")
+      return
+    else
+      throw er
+  }
+
+  let stats
+  try {
+    stats = options.statSync(paths)
+  } catch (er3:any) {
+    if (er3.code === "ENOENT")
+      return
+    else
+      throw er
+  }
+
+  if (stats.isDirectory())
+    rmdirSync(paths, options, er)
+  else
+    options.unlinkSync(paths)
+}
+
+const rmdir = (paths:string, options:Options, originalEr:any, callback: (error: Error | null | undefined) => void) => {
+  assert(paths)
+  assert(options)
+  assert(typeof callback === 'function')
+
+  // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
+  // if we guessed wrong, and it's not a directory, then
+  // raise the original error.
+  options.rmdir(paths, er => {
+    if (er && (er.code === "ENOTEMPTY" || er.code === "EEXIST" || er.code === "EPERM")){
+      rmkids(paths, options, callback)
+    } else if (er && er.code === "ENOTDIR"){
+      callback(originalEr)
+    }else{
+      callback(er)
+    }
+
+  })
+}
+
+const rmkids = (paths:string, options:Options, callback: (error: Error | null | undefined) => void) => {
+  assert(paths)
+  assert(options)
+  assert(typeof callback === 'function')
+
+  options.readdir(paths, (er, files) => {
+    if (er)
+      return callback(er)
+    let n = files.length
+    if (n === 0)
+      return options.rmdir(paths, callback)
+    let errState:any
+    files.forEach(f => {
+      rimraf(paths.join(paths, f), options, er => {
+        if (errState)
+          return
+        if (er)
+          return callback(errState = er)
+        if (--n === 0)
+          options.rmdir(paths, callback)
+      })
+    })
+  })
+}
+
+const rimrafSync = (path:string, options:Options) => {
+  options = options || {}
+  defaults(options)
+
+  assert(path, 'rimraf: missing path')
+  assert.equal(typeof path, 'string', 'rimraf: path should be a string')
+  assert(options, 'rimraf: missing options')
+  assert.equal(typeof options, 'object', 'rimraf: options should be object')
+
+  let results
+
+  if (options.disableGlob || !glob.hasMagic(path)) {
+    results = [path]
+  } else {
+    try {
+      options.lstatSync(path)
+      results = [path]
+    } catch (er) {
+      results = glob.sync(path, options.glob)
+    }
+  }
+
+  if (!results.length)
+    return
+
+  for (let i = 0; i < results.length; i++) {
+    const p = results[i]
+
+    let st
+    try {
+      st = options.lstatSync(p)
+    } catch (er:any) {
+      if (er.code === "ENOENT")
+        return
+
+      // Windows can EPERM on stat.  Life is suffering.
+      if (er.code === "EPERM" && isWindows)
+        fixWinEPERMSync(p, options, er)
+    }
+
+    try {
+      // sunos lets the root user unlink directories, which is... weird.
+      if (st && st.isDirectory())
+        rmdirSync(p, options, null)
+      else
+        options.unlinkSync(p)
+    } catch (er:any) {
+      if (er.code === "ENOENT")
+        return
+      if (er.code === "EPERM")
+        return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er)
+      if (er.code !== "EISDIR")
+        throw er
+
+      rmdirSync(p, options, er)
+    }
+  }
+}
+
