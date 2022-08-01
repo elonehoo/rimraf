@@ -229,7 +229,7 @@ const rmkids = (paths:any, options:any, callback: any) => {
       return options.rmdir(paths, callback)
     let errState:any
     files.forEach((f:any) => {
-      rimraf(paths.join(paths, f), options, (er:any) => {
+      rimraf(path.join(paths, f), options, (er:any) => {
         if (errState)
           return
         if (er)
