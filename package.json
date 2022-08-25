@@ -28,7 +28,7 @@
     "tsup": "6.2.2",
     "typescript": "4.7.4",
     "vite": "3.0.9",
-    "vitest": "0.20.3"
+    "vitest": "0.22.1"
   },
   "dependencies": {
     "glob": "^8.0.3"
