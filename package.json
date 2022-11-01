@@ -20,7 +20,7 @@
     "@elonehoo/eslint-config": "2.0.0",
     "@types/glob": "8.0.0",
     "@types/mkdirp": "1.0.2",
-    "@types/node": "18.7.13",
+    "@types/node": "18.11.9",
     "bumpp": "8.2.1",
     "eslint": "8.23.0",
     "mkdirp": "1.0.4",
