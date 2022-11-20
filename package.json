@@ -22,7 +22,7 @@
     "@types/mkdirp": "1.0.2",
     "@types/node": "18.7.13",
     "bumpp": "8.2.1",
-    "eslint": "8.23.0",
+    "eslint": "8.28.0",
     "mkdirp": "1.0.4",
     "pnpm": "7.11.0",
     "tsup": "6.2.3",
