@@ -21,7 +21,7 @@
     "@types/glob": "8.0.0",
     "@types/mkdirp": "1.0.2",
     "@types/node": "18.7.13",
-    "bumpp": "8.2.1",
+    "bumpp": "9.1.0",
     "eslint": "8.23.0",
     "mkdirp": "1.0.4",
     "pnpm": "7.11.0",
